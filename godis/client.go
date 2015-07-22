@@ -5,7 +5,7 @@ import(
 	"sync"
     "log"
 	"time"
-//	"errors"
+	"sync/atomic"
 )
 
 
@@ -45,7 +45,7 @@ func NewClient(id string, host string) (*Client, error) {
 }
 
 
-
+var op int64= 0
 func (c *Client) Call(name string, handlerFunc HandleClientFunc, args ProtoType,n int)  error {
     c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -62,36 +62,43 @@ func (c *Client) Call(name string, handlerFunc HandleClientFunc, args ProtoType,
 
 	msg, err := event.packBytes()
 
-	go func() {
+//	go func() {
 
 		key := ProducerService(name)
 		serve:= c.redisClient.conn.SRandMember(key).Val()
-
+//		log.Println("fail: %v",serve)
 		if serve!="" {
 			serveKey:=ProducerMsgQueen(serve)
-//			log.Printf("serverKey: %v\n", serveKey)
+
 			c.redisClient.conn.LPush(serveKey, string(msg[:]))
 			task:= ClientTask{
 				TaskId:event.MsgId,
 				HandlerFunc: handlerFunc,
 			}
-
+			atomic.AddInt64(&op, 1)
+			log.Println("send: %d",op)
 			c.HandleTasks=append(c.HandleTasks,&task)
+		}else{
+//			log.Println("fail: %v",serve)
 		}
-	}()
+//	}()
 	return nil
 }
-
+var o int64= 0
 
 func (c *Client) Listen() {
 
 	key := ConsumerMsgQueen(c.id)
 
 	for {
+		if !c.isListening{
+			break;
+		}
 		msg := c.redisClient.conn.BLPop(2 * time.Second, key).Val()
-		log.Printf("listen:%key: %v\n", key,msg)
+    	log.Printf("listen:%key: %v\n", key,msg)
 		if  len(msg)!=0 {
-//			log.Printf("msg: %v\n", msg)
+        	atomic.AddInt64(&o, 1)
+			log.Println("e: %d",o)
      		go c.ProcessFunc(msg[1])
 		}
 
@@ -101,7 +108,8 @@ func (c *Client) Listen() {
 
 
 func (c *Client) ProcessFunc(msg string) {
-
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	mySlice := []byte(msg)
 
 	resp, err := unPackRespByte(mySlice)
@@ -109,11 +117,15 @@ func (c *Client) ProcessFunc(msg string) {
 	log.Printf("err: %v\n", err)
 	}
 
-	for _, h := range  c.HandleTasks{
+	for i, h := range  c.HandleTasks{
 		if h.TaskId == resp.MsgId{
 			(*h.HandlerFunc)(resp.RespInfo)
+			c.HandleTasks = append(c.HandleTasks[:i], c.HandleTasks[i+1:]...)
+			break
 		}
 	}
-
+	if len(c.HandleTasks)==0 {
+		c.isListening = false
+	}
 }
 

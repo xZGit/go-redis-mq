@@ -4,7 +4,7 @@ package godis
 import (
 	"sync"
 	"log"
-//	"errors"
+	"sync/atomic"
 	"time"
 )
 
@@ -58,7 +58,7 @@ func (s *Server) RegisterTask(name string, handlerFunc HandleServerFunc, c chan 
 	}()
 }
 
-
+var ops int64= 0
 func (s *Server) Listen() {
 
 	key := ProducerMsgQueen(s.id)
@@ -66,8 +66,10 @@ func (s *Server) Listen() {
 	for {
 
 		msg := s.redisClient.conn.BLPop(2 * time.Second, key).Val()
-		log.Printf("listen:%key: %v\n", key,msg)
+//		log.Printf("listen:%key: %v\n", key,msg)
 		if  len(msg)!=0 {
+			atomic.AddInt64(&ops, 1)
+			log.Println("rec: %d",ops)
 		   go s.ProcessFunc(msg[1])
 		}
 	}
