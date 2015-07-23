@@ -13,7 +13,7 @@ import
 type ProtoType map[interface{}]interface{}
 type HandleServerFunc *func(args ProtoType) (ProtoType, error)
 type HandleClientFunc *func(args RespInfo) (interface{}, error)
-var MaxRetryCount = 2
+var  MaxRetryCount = 2
 // Event representation
 type Event struct {
 	MId   string //机器id
