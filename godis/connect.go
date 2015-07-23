@@ -3,14 +3,15 @@ package godis
 
 import
 (
-     "sync"
-     "gopkg.in/redis.v3"
+	"sync"
+	"gopkg.in/redis.v3"
 )
 
 
 type RedisClient struct {
-	conn  *redis.Client
-	mutex sync.Mutex
+	pushConn *redis.Client
+	popConn  *redis.Client
+	mutex    sync.Mutex
 }
 
 
@@ -20,18 +21,23 @@ type Value struct {
 
 
 func NewRedisClient(host string) *RedisClient {
-//	host = fmt.Sprintf("%s:6379", host)
-	var conn *redis.Client
+	//	host = fmt.Sprintf("%s:6379", host)
+	var pushConn, popConn *redis.Client
 
-	conn = redis.NewClient(&redis.Options{
+	pushConn = redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "", // no password set
-		DB:       0,  // use default DB
+		DB:       0, // use default DB
 	})
-
-	client := & RedisClient{
-		conn:conn,
-		}
+	popConn = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0, // use default DB
+	})
+	client := &RedisClient{
+		pushConn: pushConn,
+		popConn: popConn,
+	}
 	return client
 }
 

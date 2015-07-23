@@ -23,10 +23,10 @@ type Server struct {
 func NewServer(id string, host string) (*Server, error) {
 	redisClient := NewRedisClient(host)
 	key := Producers()
-	val := redisClient.conn.SAdd(key, id).Val()
+	val := redisClient.pushConn.SAdd(key, id).Val()
 
 	if (val==0) {
-//		return nil, errors.New("zerorpc/event interface conversion error")
+		//		return nil, errors.New("zerorpc/event interface conversion error")
 	}
 
 	return &Server{
@@ -41,7 +41,7 @@ func NewServer(id string, host string) (*Server, error) {
 
 func (s *Server) RegisterTask(name string, handlerFunc HandleServerFunc, c chan int) {
 	go func() {
-	log.Println("s %v", s)
+		log.Println("s %v", s)
 		for _, h := range s.HandleTasks {
 			if h.TaskName == name {
 				log.Println("exist %s", name)
@@ -54,23 +54,23 @@ func (s *Server) RegisterTask(name string, handlerFunc HandleServerFunc, c chan 
 		}
 		s.HandleTasks=append(s.HandleTasks, &task)
 		key := ProducerService(name)
-		s.redisClient.conn.SAdd(key, s.id)
+		s.redisClient.popConn.SAdd(key, s.id)
 	}()
 }
 
-var ops int64= 0
+var ops int64 = 0
 func (s *Server) Listen() {
 
 	key := ProducerMsgQueen(s.id)
 	log.Printf(key)
 	for {
 
-		msg := s.redisClient.conn.BLPop(2 * time.Second, key).Val()
-//		log.Printf("listen:%key: %v\n", key,msg)
-		if  len(msg)!=0 {
+		msg := s.redisClient.popConn.BLPop(2 * time.Second, key).Val()
+		//		log.Printf("listen:%key: %v\n", key,msg)
+		if len(msg)!=0 {
 			atomic.AddInt64(&ops, 1)
-			log.Println("rec: %d",ops)
-		   go s.ProcessFunc(msg[1])
+			log.Println("rec: %d", ops)
+			go s.ProcessFunc(msg[1])
 		}
 	}
 }
@@ -89,7 +89,7 @@ func (s *Server) ProcessFunc(msg string) {
 			v, err := (*h.HandlerFunc)(ev.Args)
 			var resp Resp
 			if err != nil {
-				resp = newResp(ev.MsgId, 1, err.Error(), nil)
+				resp = newResp(ev.MsgId, 1, "err", nil)
 			}else {
 				resp = newResp(ev.MsgId, 0, "", v)
 			}
@@ -97,7 +97,7 @@ func (s *Server) ProcessFunc(msg string) {
 			ack, err := resp.packBytes()
 
 			comsumerKey := ConsumerMsgQueen(ev.MId)
-			s.redisClient.conn.RPush(comsumerKey, string(ack[:]))
+			s.redisClient.pushConn.RPush(comsumerKey, string(ack[:]))
 		}
 	}
 

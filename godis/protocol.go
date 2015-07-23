@@ -13,21 +13,22 @@ import
 type ProtoType map[interface{}]interface{}
 type HandleServerFunc *func(args ProtoType) (ProtoType, error)
 type HandleClientFunc *func(args RespInfo) (interface{}, error)
+var MaxRetryCount = 2
 // Event representation
 type Event struct {
-	MId   string  //机器id
-	MsgId string  //
-	Name  string  //对应服务名称
+	MId   string //机器id
+	MsgId string //
+	Name  string //对应服务名称
 	Args  ProtoType
 }
 
-type RespInfo struct{
-    Code   int64
-    Data   ProtoType
-    ErrMsg string
+type RespInfo struct {
+	Code   int64
+	Data   ProtoType
+	ErrMsg string
 }
 type Resp  struct {
-	MsgId string
+	MsgId    string
 	RespInfo RespInfo
 }
 
@@ -73,7 +74,7 @@ func (r *Resp) packBytes() ([]byte, error) {
 	data[1] = r.RespInfo.Code
 	data[2] = r.RespInfo.Data
 	if len(r.RespInfo.ErrMsg)>0 {
-		data = append(data,r.RespInfo.ErrMsg)
+		data = append(data, r.RespInfo.ErrMsg)
 	}
 	return encode(data)
 }
@@ -173,9 +174,9 @@ func unPackRespByte(b []byte) (*Resp, error) {
 		er := convertValue(v.([]interface{})[3])
 		r.ErrMsg = er.(string)
 	}
-	resp:= Resp{
+	resp := Resp{
 		MsgId: msgId.(string),
-	    RespInfo: r,
+		RespInfo: r,
 	}
 	return &resp, nil
 }
