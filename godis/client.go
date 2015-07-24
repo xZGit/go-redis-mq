@@ -83,7 +83,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, key string, re
 		c.redisClient.pushConn.LPush(serveKey, string(msg[:]))
 
 		atomic.AddInt64(&op, 1)
-		log.Println("send: %d", op)
+//		log.Println("send: %d", op)
 	}else {
 
 	}
@@ -113,7 +113,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, key string, re
 
 		}
 	}()
-	log.Println("finish!")
+//	log.Println("finish!")
 }
 
 
@@ -161,8 +161,7 @@ func (c *Client) Listen() {
 
 
 func (c *Client) ProcessFunc(msg string) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+
 	mySlice := []byte(msg)
 
 	resp, err := unPackRespByte(mySlice)
@@ -178,7 +177,8 @@ func (c *Client) ProcessFunc(msg string) {
 		log.Println("fn Not Found")
 	}
 
-
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if len(c.HandleTasks)==0 {
 		c.isListening = false
 	}

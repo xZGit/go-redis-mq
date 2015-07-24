@@ -6,15 +6,25 @@ import (
     "errors"
 	"log"
 	"sync/atomic"
+//	"time"
+	"syscall"
 
 )
 
 var ops int64= 0
 
 func Afunction(client *godis.Client, shownum int) {
+	var ts, te syscall.Timeval
+	syscall.Gettimeofday(&ts)
+	start:=(int64(ts.Sec)*1e3 + int64(ts.Usec)/1e3)
+
 	h := func(v godis.RespInfo) (interface{}, error){
-		atomic.AddInt64(&ops, 1)
-     	log.Println("done: %d",ops)
+
+		syscall.Gettimeofday(&te)
+		end:=(int64(te.Sec)*1e3 + int64(te.Usec)/1e3)
+		cost:=end-start
+		atomic.AddInt64(&ops, cost)
+		log.Println("cost: %d",ops)
 		return nil, errors.New("Ssss")
 	}
 

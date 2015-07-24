@@ -8,16 +8,13 @@ import (
 	"time"
 )
 
-type ServerTask struct {
-	TaskName    string
-	HandlerFunc HandleServerFunc
-}
+
 
 type Server struct {
 	id          string
 	redisClient *RedisClient
 	mutex       sync.Mutex
-	HandleTasks [] *ServerTask
+	HandleTasks map[string] HandleServerFunc
 }
 
 func NewServer(id string, host string) (*Server, error) {
@@ -32,7 +29,7 @@ func NewServer(id string, host string) (*Server, error) {
 	return &Server{
 		id :id,
 		redisClient:redisClient,
-		HandleTasks:make([]*ServerTask, 0),
+		HandleTasks:make(map[string] HandleServerFunc),
 	}, nil
 
 }
@@ -42,17 +39,11 @@ func NewServer(id string, host string) (*Server, error) {
 func (s *Server) RegisterTask(name string, handlerFunc HandleServerFunc, c chan int) {
 	go func() {
 		log.Println("s %v", s)
-		for _, h := range s.HandleTasks {
-			if h.TaskName == name {
-				log.Println("exist %s", name)
-				return
-			}
+		if _, ok := s.HandleTasks[name]; ok {
+			log.Println("register repeat %s",name)
+			return
 		}
-		task := ServerTask{
-			TaskName: name,
-			HandlerFunc: handlerFunc,
-		}
-		s.HandleTasks=append(s.HandleTasks, &task)
+		s.HandleTasks[name] = handlerFunc
 		key := ProducerService(name)
 		s.redisClient.popConn.SAdd(key, s.id)
 	}()
@@ -83,22 +74,23 @@ func (s *Server) ProcessFunc(msg string) {
 	if err != nil {
 		panic(err)
 	}
+	var resp Resp
 
-	for _, h := range s.HandleTasks {
-		if h.TaskName == ev.Name {
-			v, err := (*h.HandlerFunc)(ev.Args)
-			var resp Resp
+	if f, ok := s.HandleTasks[ev.Name]; ok {
+			v, err := (*f)(ev.Args)
+
 			if err != nil {
 				resp = newResp(ev.MsgId, 1, "err", nil)
 			}else {
 				resp = newResp(ev.MsgId, 0, "", v)
 			}
 
-			ack, err := resp.packBytes()
-
-			comsumerKey := ConsumerMsgQueen(ev.MId)
-			s.redisClient.pushConn.RPush(comsumerKey, string(ack[:]))
-		}
+      }else{
+		resp = newResp(ev.MsgId, 0, "", nil)
 	}
+	ack, err := resp.packBytes()
+	consumerKey := ConsumerMsgQueen(ev.MId)
+	s.redisClient.pushConn.RPush(consumerKey, string(ack[:]))
+
 
 }
