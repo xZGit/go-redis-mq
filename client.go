@@ -41,7 +41,7 @@ func Afunction(client *godis.Client, shownum int) {
 func main (){
 	c := make(chan int)
 	client, _:=godis.NewClient("3", "127.0.0.1")
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1; i++ {
 			go Afunction(client,i)
 		}
 

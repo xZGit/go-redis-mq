@@ -6,13 +6,13 @@ package godis
 
 var prefix="godis::"
 
-func Consumers() string {   //set
-	return  prefix + "comsumers"
+func Consumers(consumer string) string {   //set
+	return  prefix + "comsumers::" +consumer
 }
 
 
-func Producers() string {    //set
-	return  prefix + "producers"
+func Producers(producer string) string {    //set
+	return  prefix + "producers::" +producer
 }
 
 
@@ -22,13 +22,13 @@ func ProducerService(service string) string {  //set  value:producer
 
 
 func ProducerMsgQueen(producer string) string {   //list
-	return  prefix +  producer + "::message"
+	return  prefix +  "producers::" + producer + "::message"
 }
 
 
 
 
 func ConsumerMsgQueen(consumer string) string {  //list
-	return  prefix + consumer + "::message"
+	return  prefix + "comsumers::" + consumer + "::message"
 }
 

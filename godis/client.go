@@ -6,6 +6,9 @@ import (
 	"log"
 	"time"
 	"sync/atomic"
+	"gopkg.in/redis.v3"
+	"strconv"
+    "math/rand"
 )
 
 
@@ -28,13 +31,10 @@ type Client struct {
 
 func NewClient(id string, host string) (*Client, error) {
 	redisClient := NewRedisClient(host)
-	key := Consumers()
-	val := redisClient.pushConn.SAdd(key, id).Val()
+	key := Consumers(id)
+	val := redisClient.pushConn.Keys(key).Val()
 
-	if (val==0) {
-		//		return nil,  errors.New("zerorpc/event interface conversion error")
-	}
-
+	log.Println("key,%v",val)
 	client := Client{
 		id: id,
 		redisClient: redisClient,
@@ -75,15 +75,32 @@ func (c *Client) Call(name string, handlerFunc HandleClientFunc, args ProtoType,
 }
 
 var op int64 = 0
+
+
+func randServer(l int) int {
+	return rand.Intn(l)
+}
+
+
 func (c *Client) Invoke(msgId string, done chan bool, msg string, key string, retryCount int) {
 	c.mutex.Lock()
-	serve := c.redisClient.pushConn.SRandMember(key).Val()
-	if serve!="" {
-		serveKey := ProducerMsgQueen(serve)
-		c.redisClient.pushConn.LPush(serveKey, string(msg[:]))
 
+	opt:= redis.ZRangeByScore{
+		Min: strconv.FormatInt(time.Now().Unix(),10),
+        Max: "+inf",
+	}
+
+	servers := c.redisClient.pushConn.ZRangeByScore(key,opt).Val()
+	l :=len(servers)
+
+	if l!= 0 {
+		server:=servers[randServer(l)]
+		log.Println("server: %d",server)
+		serverKey := ProducerMsgQueen(server)
+		c.redisClient.pushConn.LPush(serverKey, string(msg[:]))
 		atomic.AddInt64(&op, 1)
-//		log.Println("send: %d", op)
+		log.Println("send: %d", op)
+
 	}else {
 
 	}
