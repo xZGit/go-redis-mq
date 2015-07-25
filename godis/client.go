@@ -5,10 +5,9 @@ import (
 	"sync"
 	"log"
 	"time"
-	"sync/atomic"
 	"gopkg.in/redis.v3"
 	"strconv"
-    "math/rand"
+	"math/rand"
 )
 
 
@@ -19,12 +18,19 @@ type ClientTask struct {
 	HandlerFunc HandleClientFunc
 }
 
+type ServiceCache struct {
+	id       string
+	expireAt int64
+}
+
+
 type Client struct {
-	id          string
-	redisClient *RedisClient
-	mutex       sync.Mutex
-	HandleTasks map[string]*ClientTask
-	isListening bool
+	id           string
+	redisClient  *RedisClient
+	mutex        sync.Mutex
+	HandleTasks  map[string]*ClientTask
+	serviceCache map[string]*ServiceCache
+	isListening  bool
 }
 
 
@@ -34,11 +40,12 @@ func NewClient(id string, host string) (*Client, error) {
 	key := Consumers(id)
 	val := redisClient.pushConn.Keys(key).Val()
 
-	log.Println("key,%v",val)
+	log.Println("key,%v", val)
 	client := Client{
 		id: id,
 		redisClient: redisClient,
 		HandleTasks: make(map[string]*ClientTask),
+		serviceCache: make(map[string]*ServiceCache),
 	}
 
 	return &client, nil
@@ -68,13 +75,13 @@ func (c *Client) Call(name string, handlerFunc HandleClientFunc, args ProtoType,
 		HandlerFunc:handlerFunc,
 	}
 
-	key := ProducerService(name)
-	go c.Invoke(event.MsgId, done, string(msg[:]), key, 0)
+
+	go c.Invoke(event.MsgId, done, string(msg[:]), name, 0)
 
 	return nil
 }
 
-var op int64 = 0
+
 
 
 func randServer(l int) int {
@@ -82,28 +89,37 @@ func randServer(l int) int {
 }
 
 
-func (c *Client) Invoke(msgId string, done chan bool, msg string, key string, retryCount int) {
+func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName string, retryCount int) {
 	c.mutex.Lock()
 
-	opt:= redis.ZRangeByScore{
-		Min: strconv.FormatInt(time.Now().Unix(),10),
-        Max: "+inf",
+	now := time.Now().Unix()
+	var server string
+	if sc, ok := c.serviceCache[serviceName]; ok && sc.expireAt > now {
+		server = sc.id
+	} else {
+		key := ProducerService(serviceName)
+		opt := redis.ZRangeByScore{
+			Min: strconv.FormatInt(now, 10),
+			Max: "+inf",
+		}
+		log.Println("no cache %v", opt)
+		servers := c.redisClient.pushConn.ZRangeByScore(key, opt).Val()
+		l := len(servers)
+		if l!= 0 {
+			server = servers[randServer(l)]
+			c.serviceCache[serviceName]= &ServiceCache{
+				id:server,
+				expireAt:time.Now().Add(time.Minute).Unix(),
+			}
+		}else {
+            go c.Send404(msgId)
+			return
+		}
 	}
 
-	servers := c.redisClient.pushConn.ZRangeByScore(key,opt).Val()
-	l :=len(servers)
+	serverKey := ProducerMsgQueen(server)
+	c.redisClient.pushConn.LPush(serverKey, string(msg[:]))
 
-	if l!= 0 {
-		server:=servers[randServer(l)]
-		log.Println("server: %d",server)
-		serverKey := ProducerMsgQueen(server)
-		c.redisClient.pushConn.LPush(serverKey, string(msg[:]))
-		atomic.AddInt64(&op, 1)
-		log.Println("send: %d", op)
-
-	}else {
-
-	}
 	c.mutex.Unlock()
 	go func() {
 		ttl := time.After(60 * time.Second)
@@ -118,7 +134,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, key string, re
 					retryCount=retryCount+1
 					log.Println("retry : %d", retryCount)
 					if retryCount<MaxRetryCount {
-						go c.Invoke(msgId, done, msg, key, retryCount)
+						go c.Invoke(msgId, done, msg, serviceName, retryCount)
 					} else {
 						go c.RemoveTimeoutTask(msgId)
 					}
@@ -130,7 +146,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, key string, re
 
 		}
 	}()
-//	log.Println("finish!")
+	//	log.Println("finish!")
 }
 
 
@@ -151,12 +167,26 @@ func (c *Client) RemoveTimeoutTask(msgId string) {
 }
 
 
+func (c *Client) Send404(msgId string) {
+	log.Println("sorry not found !")
+	resp := Resp{
+		RespInfo:RespInfo{
+			Code:2,
+			ErrMsg:"SERVICE NOT FOUND",
+		},
+	}
+	if fn, ok := c.HandleTasks[msgId]; ok {
+		(*fn.HandlerFunc)(resp.RespInfo)
+		delete(c.HandleTasks, resp.MsgId)
+	} else {
+		log.Println("fn is Not Found")
+	}
+}
 
 
 
 
 
-var o int64 = 0
 
 func (c *Client) Listen() {
 
@@ -168,7 +198,6 @@ func (c *Client) Listen() {
 		}
 		msg := c.redisClient.popConn.BLPop(2 * time.Second, key).Val()
 		if len(msg)!=0 {
-			atomic.AddInt64(&o, 1)
 			go c.ProcessFunc(msg[1])
 		}
 

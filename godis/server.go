@@ -74,10 +74,9 @@ func (s *Server) HeartBeat() {
 
 	var beatFunc = func() {
 
-		expireTime := time.Now().Add(30*time.Second)
+		expireTime := time.Now().Add(120*time.Second)
 		s.redisClient.popConn.ExpireAt(serverKey, expireTime)
 		for key, _ := range s.HandleTasks {
-			log.Println("register key:", key)
 			serviceKey := ProducerService(key)
 			log.Println("register key:", serviceKey)
 			m:= redis.Z{
@@ -91,13 +90,13 @@ func (s *Server) HeartBeat() {
 
 	beatFunc()
 
-//	timer := time.NewTicker(60 * time.Second)
-//	for {
-//		select {
-//		case <-timer.C:
-//			go beatFunc()
-//		}
-//	}
+	timer := time.NewTicker(60 * time.Second)
+	for {
+		select {
+		case <-timer.C:
+			go beatFunc()
+		}
+	}
 }
 
 
