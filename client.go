@@ -19,7 +19,7 @@ func Afunction(client *godis.Client, shownum int) {
 	start:=(int64(ts.Sec)*1e3 + int64(ts.Usec)/1e3)
 
 	h := func(v godis.RespInfo) (interface{}, error){
-
+		log.Println("v: %v",v.Data["r"])
 		syscall.Gettimeofday(&te)
 		end:=(int64(te.Sec)*1e3 + int64(te.Usec)/1e3)
 		cost:=end-start
@@ -29,8 +29,8 @@ func Afunction(client *godis.Client, shownum int) {
 	}
 
 	dd := make(godis.ProtoType)
-	dd["dd"]="fff"
-
+	dd["a"]=1
+	dd["b"]=2
 	client.Call("hello",&h,dd,shownum)
 
 }
@@ -41,7 +41,7 @@ func Afunction(client *godis.Client, shownum int) {
 func main (){
 	c := make(chan int)
 	client, _:=godis.NewClient("3", "127.0.0.1")
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 10000; i++ {
 			go Afunction(client,i)
 		}
 

@@ -15,7 +15,7 @@ func main (){
 
 	h := func(v godis.ProtoType) (godis.ProtoType, error) {
 		dd := make(godis.ProtoType)
-		dd["dd"]="fff"
+		dd["r"]=v["a"].(int64)+v["b"].(int64)
 		return dd, nil
 	}
 
