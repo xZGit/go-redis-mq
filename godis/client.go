@@ -37,8 +37,8 @@ type Client struct {
 
 func NewClient(id string, addr string) (*Client, error) {
 
-	redisClient, err:= NewRedisClient(addr)
-	if err!=nil{
+	redisClient, err := NewRedisClient(addr)
+	if err!=nil {
 		return nil, err
 	}
 	key := Consumers(id)
@@ -74,7 +74,7 @@ func (c *Client) Call(name string, handlerFunc HandleClientFunc, args ProtoType,
 
 	event, err := newEvent(c.id, name, args)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	msg, err := event.packBytes()
@@ -87,7 +87,7 @@ func (c *Client) Call(name string, handlerFunc HandleClientFunc, args ProtoType,
 
 
 	go c.Invoke(event.MsgId, done, string(msg[:]), name, 0)
-
+	go c.IncServiceCount(name)
 	return nil
 }
 
@@ -117,12 +117,13 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName st
 		l := len(servers)
 		if l!= 0 {
 			server = servers[randServer(l)]
-			c.serviceCache[serviceName]= &ServiceCache{       //save cache
+			c.serviceCache[serviceName]= &ServiceCache{//save cache
 				id:server,
 				expireAt:time.Now().Add(time.Minute).Unix(),
 			}
 		}else {
-            go c.Send404(msgId)
+			go c.Send404(msgId)
+			go c.IncServiceNotFoundCount(serviceName)
 			return
 		}
 	}
@@ -147,6 +148,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName st
 						go c.Invoke(msgId, done, msg, serviceName, retryCount)
 					} else {
 						go c.RemoveTimeoutTask(msgId)
+						go c.IncRequestTimeoutCount(serviceName)
 					}
 					end <- 1
 				}()
@@ -162,14 +164,14 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName st
 
 func (c *Client) RemoveTimeoutTask(msgId string) {
 	log.Println("sorry timeout!")
-	resp := newResp(msgId, 1001, errMsgMap[1001],nil)
+	resp := newResp(msgId, 1001, errMsgMap[1001], nil)
 	go c.ProcessFunc(&resp)
 }
 
 
 func (c *Client) Send404(msgId string) {
 	log.Println("sorry not found !")
-	resp := newResp(msgId, 1000, errMsgMap[1000],nil)
+	resp := newResp(msgId, 1000, errMsgMap[1000], nil)
 	go c.ProcessFunc(&resp)
 }
 
@@ -207,8 +209,6 @@ func (c *Client) UnpackMsg(msg string) {
 }
 
 
-
-
 func (c *Client) ProcessFunc(resp *Resp) {
 
 	if fn, ok := c.HandleTasks[resp.MsgId]; ok {
@@ -225,4 +225,22 @@ func (c *Client) ProcessFunc(resp *Resp) {
 		c.isListening = false
 	}
 }
+
+//monitor
+
+func (c *Client) IncServiceCount(serviceName string) {
+	key := ServiceCallCount(serviceName)
+	c.redisClient.pushConn.Incr(key)
+}
+
+func (c *Client) IncRequestTimeoutCount(serviceName string) {
+	key := RequestTimeoutCount(serviceName)
+	c.redisClient.pushConn.Incr(key)
+}
+
+func (c *Client) IncServiceNotFoundCount(serviceName string) {
+	key := ServiceNotFoundCount(serviceName)
+	c.redisClient.pushConn.Incr(key)
+}
+
 

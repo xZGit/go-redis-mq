@@ -43,7 +43,7 @@ func NewRedisClient(addr string) (*RedisClient, error) {
 		pushConn: pushConn,
 		popConn: popConn,
 	}
-	return  client, nil
+	return client, nil
 }
 
 

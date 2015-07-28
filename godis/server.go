@@ -71,6 +71,7 @@ func (s *Server) Listen() {
 			atomic.AddInt64(&ops, 1)
 			log.Println("rec: %d", ops)
 			go s.ProcessFunc(msg.Val()[1])
+			go s.IncServerDealCount()
 		}
 	}
 }
@@ -130,10 +131,16 @@ func (s *Server) ProcessFunc(msg string) {
 
 	ack, err := resp.packBytes()
 	if err!=nil {
+		panic(err.Error())
 		return
 	}
 	consumerKey := ConsumerMsgQueen(ev.MId)
 	s.redisClient.pushConn.RPush(consumerKey, string(ack[:]))
 
 
+}
+
+func (s *Server) IncServerDealCount() {
+	key := ServerDealCount(s.id)
+	s.redisClient.pushConn.Incr(key)
 }
