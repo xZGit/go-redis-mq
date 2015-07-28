@@ -2,7 +2,6 @@ package godis
 
 import
 (
-	"errors"
 	uuid "github.com/nu7hatch/gouuid"
 	"github.com/ugorji/go/codec"
 )
@@ -10,10 +9,7 @@ import
 
 
 
-type ProtoType map[interface{}]interface{}
-type HandleServerFunc *func(args ProtoType) (ProtoType, error)
-type HandleClientFunc *func(args RespInfo) (interface{}, error)
-var  MaxRetryCount = 2
+
 // Event representation
 type Event struct {
 	MId   string //机器id
@@ -128,18 +124,18 @@ func unPackEventBytes(b []byte) (*Event, error) {
 	// get the event headers
 	m, ok := v.([]interface{})[0].([]byte)
 	if !ok {
-		return nil, errors.New("zerorpc/event interface conversion error")
+		return nil, ConvertErr
 	}
 	// get the event headers
 	h, ok := v.([]interface{})[1].([]byte)
 	if !ok {
-		return nil, errors.New("zerorpc/event interface conversion error")
+		return nil, ConvertErr
 	}
 
 	// get the event headers
 	n, ok := v.([]interface{})[2].([]byte)
 	if !ok {
-		return nil, errors.New("zerorpc/event interface conversion error")
+		return nil, ConvertErr
 	}
 	// get the event args
 	args := convertValue(v.([]interface{})[3])
@@ -180,16 +176,7 @@ func unPackRespByte(b []byte) (*Resp, error) {
 	}
 	return &resp, nil
 }
-//
-//// Returns a pointer to a new heartbeat event
-//func newHeartbeatEvent() (*Event, error) {
-//	ev, err := newEvent("_zpc_hb", nil)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	return ev, nil
-//}
+
 
 // converts an interface{} to a type
 func convertValue(v interface{}) interface{} {

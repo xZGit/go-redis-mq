@@ -18,12 +18,20 @@ type Server struct {
 	HandleTasks map[string]HandleServerFunc
 }
 
-func NewServer(id string, host string) (*Server, error) {
-	redisClient := NewRedisClient(host)
+func NewServer(id string, addr string) (*Server, error) {
+	redisClient, err := NewRedisClient(addr)
+	if err!=nil {
+		return nil, err
+	}
 	key := Producers(id)
-	val := redisClient.pushConn.Keys(key).Val()
-	redisClient.pushConn.Set(key, 1, 60*time.Second)
-	log.Println("key,%v", val)
+	val := redisClient.pushConn.Keys(key)
+	if val.Err()!=nil {
+		return nil, val.Err()
+	}
+	if len(val.Val())!=0 {
+		return nil, SCRepeatErr
+	}
+	redisClient.pushConn.Set(key, 1, 120*time.Second)
 	return &Server{
 		id :id,
 		redisClient:redisClient,
@@ -34,16 +42,17 @@ func NewServer(id string, host string) (*Server, error) {
 
 
 
-func (s *Server) RegisterTask(name string, handlerFunc HandleServerFunc, c chan int) {
+func (s *Server) RegisterTask(name string, handlerFunc HandleServerFunc) {
+
 	go func() {
-		log.Println("s %v", s)
 		if _, ok := s.HandleTasks[name]; ok {
-			log.Println("register repeat %s", name)
+			log.Println("register repeat service %s", name)
+			panic(ServiceRepeatErr)
 			return
 		}
 		s.HandleTasks[name] = handlerFunc
-
 	}()
+
 }
 
 
@@ -54,16 +63,14 @@ var ops int64 = 0
 func (s *Server) Listen() {
 
 	key := ProducerMsgQueen(s.id)
-	log.Printf(key)
 	go s.HeartBeat()
 	for {
 
-		msg := s.redisClient.popConn.BLPop(2 * time.Second, key).Val()
-		//		log.Printf("listen:%key: %v\n", key,msg)
-		if len(msg)!=0 {
+		msg := s.redisClient.popConn.BLPop(2 * time.Second, key)
+		if len(msg.Val())!=0 {
 			atomic.AddInt64(&ops, 1)
 			log.Println("rec: %d", ops)
-			go s.ProcessFunc(msg[1])
+			go s.ProcessFunc(msg.Val()[1])
 		}
 	}
 }
@@ -79,7 +86,7 @@ func (s *Server) HeartBeat() {
 		for key, _ := range s.HandleTasks {
 			serviceKey := ProducerService(key)
 			log.Println("register key:", serviceKey)
-			m:= redis.Z{
+			m := redis.Z{
 				Score:float64(expireTime.Unix()),
 				Member:s.id,
 			}
@@ -105,23 +112,26 @@ func (s *Server) ProcessFunc(msg string) {
 	mySlice := []byte(msg)
 	ev, err := unPackEventBytes(mySlice)
 	if err != nil {
-		panic(err)
+		panic(err.Error())
+		return
 	}
 	var resp Resp
 
 	if f, ok := s.HandleTasks[ev.Name]; ok {
-		v, err := (*f)(ev.Args)
-
-		if err != nil {
-			resp = newResp(ev.MsgId, 1, "err", nil)
-		}else {
-			resp = newResp(ev.MsgId, 0, "", v)
+		code, data, err := (*f)(ev.Args)
+		msg := ""
+		if (err!=nil) {
+			msg =err.Error()
 		}
-
+		resp = newResp(ev.MsgId, code, msg, data)
 	}else {
-		resp = newResp(ev.MsgId, 0, "", nil)
+		resp = newResp(ev.MsgId, 1002, errMsgMap[1002], nil)
 	}
+
 	ack, err := resp.packBytes()
+	if err!=nil {
+		return
+	}
 	consumerKey := ConsumerMsgQueen(ev.MId)
 	s.redisClient.pushConn.RPush(consumerKey, string(ack[:]))
 

@@ -35,10 +35,20 @@ type Client struct {
 
 
 
-func NewClient(id string, host string) (*Client, error) {
-	redisClient := NewRedisClient(host)
+func NewClient(id string, addr string) (*Client, error) {
+
+	redisClient, err:= NewRedisClient(addr)
+	if err!=nil{
+		return nil, err
+	}
 	key := Consumers(id)
-	val := redisClient.pushConn.Keys(key).Val()
+	val := redisClient.pushConn.Keys(key)
+	if val.Err()!=nil {
+		return nil, val.Err()
+	}
+	if len(val.Val())!=0 {
+		return nil, SCRepeatErr
+	}
 
 	log.Println("key,%v", val)
 	client := Client{
@@ -107,7 +117,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName st
 		l := len(servers)
 		if l!= 0 {
 			server = servers[randServer(l)]
-			c.serviceCache[serviceName]= &ServiceCache{
+			c.serviceCache[serviceName]= &ServiceCache{       //save cache
 				id:server,
 				expireAt:time.Now().Add(time.Minute).Unix(),
 			}
@@ -152,35 +162,15 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName st
 
 func (c *Client) RemoveTimeoutTask(msgId string) {
 	log.Println("sorry timeout!")
-	resp := Resp{
-		RespInfo:RespInfo{
-			Code:1,
-			ErrMsg:"request timeout",
-		},
-	}
-	if fn, ok := c.HandleTasks[msgId]; ok {
-		(*fn.HandlerFunc)(resp.RespInfo)
-		delete(c.HandleTasks, resp.MsgId)
-	} else {
-		log.Println("fn is Not Found")
-	}
+	resp := newResp(msgId, 1001, errMsgMap[1001],nil)
+	go c.ProcessFunc(&resp)
 }
 
 
 func (c *Client) Send404(msgId string) {
 	log.Println("sorry not found !")
-	resp := Resp{
-		RespInfo:RespInfo{
-			Code:2,
-			ErrMsg:"SERVICE NOT FOUND",
-		},
-	}
-	if fn, ok := c.HandleTasks[msgId]; ok {
-		(*fn.HandlerFunc)(resp.RespInfo)
-		delete(c.HandleTasks, resp.MsgId)
-	} else {
-		log.Println("fn is Not Found")
-	}
+	resp := newResp(msgId, 1000, errMsgMap[1000],nil)
+	go c.ProcessFunc(&resp)
 }
 
 
@@ -198,15 +188,13 @@ func (c *Client) Listen() {
 		}
 		msg := c.redisClient.popConn.BLPop(2 * time.Second, key).Val()
 		if len(msg)!=0 {
-			go c.ProcessFunc(msg[1])
+			go c.UnpackMsg(msg[1])
 		}
 
 	}
 }
 
-
-
-func (c *Client) ProcessFunc(msg string) {
+func (c *Client) UnpackMsg(msg string) {
 
 	mySlice := []byte(msg)
 
@@ -214,6 +202,14 @@ func (c *Client) ProcessFunc(msg string) {
 	if err != nil {
 		log.Printf("err: %v\n", err)
 	}
+
+	go c.ProcessFunc(resp)
+}
+
+
+
+
+func (c *Client) ProcessFunc(resp *Resp) {
 
 	if fn, ok := c.HandleTasks[resp.MsgId]; ok {
 		(*fn.HandlerFunc)(resp.RespInfo)

@@ -20,25 +20,30 @@ type Value struct {
 }
 
 
-func NewRedisClient(host string) *RedisClient {
+func NewRedisClient(addr string) (*RedisClient, error) {
 	//	host = fmt.Sprintf("%s:6379", host)
 	var pushConn, popConn *redis.Client
 
 	pushConn = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     addr,
 		Password: "", // no password set
 		DB:       0, // use default DB
 	})
 	popConn = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     addr,
 		Password: "", // no password set
 		DB:       0, // use default DB
 	})
+	_, err := pushConn.Ping().Result()
+	if err!=nil {
+		return nil, err
+	}
+
 	client := &RedisClient{
 		pushConn: pushConn,
 		popConn: popConn,
 	}
-	return client
+	return  client, nil
 }
 
 
