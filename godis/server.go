@@ -4,7 +4,6 @@ package godis
 import (
 	"sync"
 	"log"
-	"sync/atomic"
 	"time"
 	"gopkg.in/redis.v3"
 )
@@ -31,6 +30,8 @@ func NewServer(id string, addr string) (*Server, error) {
 	if len(val.Val())!=0 {
 		return nil, SCRepeatErr
 	}
+	key = ProducerMsgQueen(id)
+	redisClient.pushConn.Del(key)
 	redisClient.pushConn.Set(key, 1, 120*time.Second)
 	return &Server{
 		id :id,
@@ -59,7 +60,7 @@ func (s *Server) RegisterTask(name string, handlerFunc HandleServerFunc) {
 
 
 
-var ops int64 = 0
+
 func (s *Server) Listen() {
 
 	key := ProducerMsgQueen(s.id)
@@ -68,8 +69,6 @@ func (s *Server) Listen() {
 
 		msg := s.redisClient.popConn.BLPop(2 * time.Second, key)
 		if len(msg.Val())!=0 {
-			atomic.AddInt64(&ops, 1)
-			log.Println("rec: %d", ops)
 			go s.ProcessFunc(msg.Val()[1])
 			go s.IncServerDealCount()
 		}
@@ -144,3 +143,5 @@ func (s *Server) IncServerDealCount() {
 	key := ServerDealCount(s.id)
 	s.redisClient.pushConn.Incr(key)
 }
+
+

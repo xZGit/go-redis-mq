@@ -8,7 +8,7 @@ import (
 type ProtoType map[interface{}]interface{}
 type HandleServerFunc *func(args ProtoType) (int64, ProtoType, error)
 type HandleClientFunc *func(args RespInfo) (interface{}, error)
-var  MaxRetryCount = 2
+
 
 
 var errMsgMap = map[int64]string{

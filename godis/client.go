@@ -25,17 +25,18 @@ type ServiceCache struct {
 
 
 type Client struct {
-	id           string
-	redisClient  *RedisClient
-	mutex        sync.Mutex
-	HandleTasks  map[string]*ClientTask
-	serviceCache map[string]*ServiceCache
-	isListening  bool
+	id            string
+	redisClient   *RedisClient
+	mutex         sync.Mutex
+	HandleTasks   map[string]*ClientTask
+	serviceCache  map[string]*ServiceCache
+	maxRetryCount int
+	isListening   bool
 }
 
 
 
-func NewClient(id string, addr string) (*Client, error) {
+func NewClient(id string, addr string, maxRetryCount int) (*Client, error) {
 
 	redisClient, err := NewRedisClient(addr)
 	if err!=nil {
@@ -50,12 +51,16 @@ func NewClient(id string, addr string) (*Client, error) {
 		return nil, SCRepeatErr
 	}
 
+	key = ConsumerMsgQueen(id)
+	redisClient.pushConn.Del(key)
+
 	log.Println("key,%v", val)
 	client := Client{
 		id: id,
 		redisClient: redisClient,
 		HandleTasks: make(map[string]*ClientTask),
 		serviceCache: make(map[string]*ServiceCache),
+		maxRetryCount:maxRetryCount,
 	}
 
 	return &client, nil
@@ -63,7 +68,7 @@ func NewClient(id string, addr string) (*Client, error) {
 
 
 
-func (c *Client) Call(name string, handlerFunc HandleClientFunc, args ProtoType, n int) error {
+func (c *Client) Call(name string, handlerFunc HandleClientFunc, args ProtoType) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -144,7 +149,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName st
 				go func() {
 					retryCount=retryCount+1
 					log.Println("retry : %d", retryCount)
-					if retryCount<MaxRetryCount {
+					if retryCount<c.maxRetryCount {
 						go c.Invoke(msgId, done, msg, serviceName, retryCount)
 					} else {
 						go c.RemoveTimeoutTask(msgId)
@@ -195,6 +200,8 @@ func (c *Client) Listen() {
 
 	}
 }
+
+
 
 func (c *Client) UnpackMsg(msg string) {
 

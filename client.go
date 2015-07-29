@@ -29,10 +29,10 @@ func Afunction(client *godis.Client, shownum int) {
 		return nil, errors.New("Ssss")
 	}
 
-	dd := make(godis.ProtoType)
-	dd["a"]=1
-	dd["b"]=2
-	client.Call("hello",&h,dd,shownum)
+	n := make(godis.ProtoType)
+	n["a"]=1
+	n["b"]=2
+	client.Call("hello",&h,n)
 
 }
 
@@ -40,8 +40,7 @@ func Afunction(client *godis.Client, shownum int) {
 
 
 func main (){
-	c := make(chan int)
-	client, _:=godis.NewClient("3", "127.0.0.1:6379")
+	client, _:=godis.NewClient("3", "127.0.0.1:6379",5)
 	timer := time.NewTicker(10 * time.Second)
 	for {
 		select {
@@ -54,7 +53,4 @@ func main (){
 	}
 
 
-
-
-	log.Println("finish!!!!",<-c)
 }
