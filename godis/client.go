@@ -117,7 +117,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName st
 			Min: strconv.FormatInt(now, 10),
 			Max: "+inf",
 		}
-		log.Println("no cache %v", opt)
+//		log.Println("no cache %v", opt)
 		servers := c.redisClient.pushConn.ZRangeByScore(key, opt).Val()
 		l := len(servers)
 		if l!= 0 {

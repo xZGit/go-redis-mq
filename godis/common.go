@@ -19,8 +19,8 @@ var errMsgMap = map[int64]string{
 }
 
 var ConvertErr = errors.New("event interface conversion error")
-var SCRepeatErr  = errors.New("the server or client id is register already")
-var ServiceRepeatErr  = errors.New("the service is register already")
+var SCRepeatErr = errors.New("the server or client id is register already")
+var ServiceRepeatErr = errors.New("the service is register already")
 
 
 

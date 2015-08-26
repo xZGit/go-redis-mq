@@ -39,7 +39,7 @@ func (m *Monitor) Listen() {
 	for {
 		select {
 		case <-timer.C:
-             go m.Log()
+			go m.Log()
 		}
 	}
 }

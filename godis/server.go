@@ -30,7 +30,7 @@ func NewServer(id string, addr string) (*Server, error) {
 	if len(val.Val())!=0 {
 		return nil, SCRepeatErr
 	}
-	key = ProducerMsgQueen(id)
+	key =  ProducerService(id)
 	redisClient.pushConn.Del(key)
 	redisClient.pushConn.Set(key, 1, 120*time.Second)
 	return &Server{
@@ -67,7 +67,7 @@ func (s *Server) Listen() {
 	go s.HeartBeat()
 	for {
 
-		msg := s.redisClient.popConn.BLPop(2 * time.Second, key)
+		msg := s.redisClient.pushConn.BLPop(2 * time.Second, key)
 		if len(msg.Val())!=0 {
 			go s.ProcessFunc(msg.Val()[1])
 			go s.IncServerDealCount()
