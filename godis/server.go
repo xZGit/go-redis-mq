@@ -67,7 +67,7 @@ func (s *Server) Listen() {
 	go s.HeartBeat()
 	for {
 
-		msg := s.redisClient.pushConn.BLPop(2 * time.Second, key)
+		msg := s.redisClient.popConn.BLPop(2 * time.Second, key)
 		if len(msg.Val())!=0 {
 			go s.ProcessFunc(msg.Val()[1])
 			go s.IncServerDealCount()

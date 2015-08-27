@@ -134,7 +134,7 @@ func (c *Client) Invoke(msgId string, done chan bool, msg string, serviceName st
 	}
 
 	serverKey := ProducerMsgQueen(server)
-	c.redisClient.pushConn.LPush(serverKey, string(msg[:]))
+	c.redisClient.pushConn.RPush(serverKey, string(msg[:]))
 
 	c.mutex.Unlock()
 	go func() {
